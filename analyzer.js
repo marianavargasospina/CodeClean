@@ -1,6 +1,6 @@
 /**
  * Motor local de análisis de CodeClean.
- * Contiene reglas deterministas; no realiza solicitudes de red ni ejecuta código del usuario.
+ * Reglas deterministas sin solicitudes de red ni ejecución del código analizado.
  */
 
 const MAX_SCORE = 100;
@@ -34,13 +34,14 @@ function analyzeStaticRules(code) {
         }));
     }
 
-    if (/<button\b[^>]*>\s*<\/button>/i.test(code)) {
+    const emptyButton = /<button\b[^>]*>\s*<\/button>/i.test(code);
+    if (emptyButton) {
         issues.push(createIssue({
             type: "error",
             ruleId: "EMPTY_BUTTON",
             title: "Botón sin nombre accesible",
             detail: "Se encontró un botón sin contenido textual.",
-            solution: "Incluye un texto descriptivo o proporciona un nombre accesible mediante aria-label."
+            solution: "Incluye texto descriptivo o proporciona un nombre accesible mediante aria-label."
         }));
     }
 
@@ -58,7 +59,7 @@ function analyzeStaticRules(code) {
     const score = Math.max(0, MAX_SCORE
         - imagesWithoutAlt.length * 15
         - inlineStyles.length * 10
-        - (/<button\b[^>]*>\s*<\/button>/i.test(code) ? 20 : 0)
+        - (emptyButton ? 20 : 0)
         - deprecatedTags.length * 10);
 
     return { issues, score };
@@ -66,14 +67,19 @@ function analyzeStaticRules(code) {
 
 function analyzeSemanticFallback(code) {
     const issues = [];
+    const containsHtml = /<[a-z][\s\S]*?>/i.test(code);
+
+    if (!containsHtml) {
+        return { issues, score: MAX_SCORE };
+    }
 
     if (/<div\b[^>]*class\s*=\s*["'][^"']*\b(header|nav|content|footer|main|card)\b[^"']*["']/i.test(code)) {
         issues.push(createIssue({
             type: "warning",
             ruleId: "SEMANTIC_HTML",
-            title: "Posible falta de semántica HTML5",
+            title: "Posible oportunidad de mejorar la semántica HTML5",
             detail: "Se detectaron contenedores div que podrían representar regiones semánticas.",
-            solution: "Evalúa si corresponde utilizar header, nav, main, footer, section o article."
+            solution: "Evalúa si corresponde utilizar header, nav, main, footer, section o article. La clase por sí sola no demuestra un error."
         }));
     }
 
@@ -87,13 +93,13 @@ function analyzeSemanticFallback(code) {
         }));
     }
 
-    if (code.length > 50 && !/<h1\b[^>]*>/i.test(code)) {
+    if (code.length > 50 && !/<h1\b[^>]*>/i.test(code) && /<body\b/i.test(code)) {
         issues.push(createIssue({
             type: "warning",
             ruleId: "MISSING_H1",
             title: "No se encontró un encabezado principal",
-            detail: "El fragmento no contiene un elemento h1.",
-            solution: "Incluye un encabezado principal cuando corresponda a la estructura del documento."
+            detail: "El documento HTML no contiene un elemento h1.",
+            solution: "Incluye un encabezado principal que describa el propósito de la página."
         }));
     }
 
@@ -104,6 +110,10 @@ function analyzeSemanticFallback(code) {
 }
 
 export function analyzeCodeLocally(code) {
+    if (typeof code !== "string") {
+        throw new TypeError("El código que se va a analizar debe ser una cadena de texto.");
+    }
+
     const staticResult = analyzeStaticRules(code);
     const semanticResult = analyzeSemanticFallback(code);
 
